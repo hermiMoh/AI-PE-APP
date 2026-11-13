@@ -42,5 +42,53 @@ function loop(now){if(!active)return;raf=requestAnimationFrame(loop);if(video.re
 let timeAccumulator=0;function clock(now){if(!active)return;if(!paused&&lastTick){timeAccumulator+=Math.min(now-lastTick,250);if(timeAccumulator>=1000){elapsed+=Math.floor(timeAccumulator/1000);timeAccumulator%=1000;update()}}lastTick=now;requestAnimationFrame(clock)}
 async function start(){setMsg("Full body visible? Start moving!"); if(active)return;$('start').disabled=true;setStatus('Loading AI…');try{await loadModel();setStatus('Requesting camera…');await startCamera();active=true;paused=false;phase='unknown';phaseSince=0;reps=0;elapsed=0;timeAccumulator=0;lastTick=0;lastFrame=-1;goalAnnounced=false;update();$('pause').disabled=false;$('finish').disabled=false;$('pause').textContent='Pause';$('start').textContent='Workout running';document.querySelectorAll('.choice').forEach(b=>b.disabled=true);setStatus('Workout in progress');setMsg('Full body visible? Start moving!');speak('Workout started');requestAnimationFrame(loop);requestAnimationFrame(clock)}catch(e){stopCamera();setStatus('Could not start');setMsg('⚠ '+(e.message||'Unable to access camera or load AI. Check permissions and internet connection.'));$('start').disabled=false}}
 function pause(){if(!active)return;paused=!paused;$('pause').textContent=paused?'Resume':'Pause';setStatus(paused?'Workout paused':'Workout in progress');lastTick=0;timeAccumulator=0}
-function finish(){if(!active)return;active=false;cancelAnimationFrame(raf);stopCamera();$('start').disabled=false;$('start').textContent='▶ Start workout';$('pause').disabled=true;$('finish').disabled=true;document.querySelectorAll('.choice').forEach(b=>b.disabled=false);setStatus('Session finished');$('finalReps').textContent=reps;$('finalTime').textContent=fmt(elapsed);$('finalGoal').textContent=`${Math.round(reps/target()*100)}%`;$('summary').hidden=false;$('summary').scrollIntoView({behavior:'smooth',block:'nearest'});speak('Workout complete')}
-$('start').addEventListener('click',()=>{setMsg('Start tapped — checking camera…');start()});$('pause').onclick=pause;$('finish').onclick=finish;$('again').onclick=()=>{$('summary').hidden=true;window.scrollTo({top:0,behavior:'smooth'});setMsg('Choose your exercise and press Start workout.')};$('flipCamera').onclick=async()=>{if(!active)return;const wasPaused=paused;paused=true;stopCamera();cameraFacing=cameraFacing==='user'?'environment':'user';try{await startCamera();phase='unknown';phaseSince=0;lastFrame=-1;paused=wasPaused}catch(e){setMsg('Camera switch failed: '+e.message);finish()}};window.addEventListener('pagehide',()=>{active=false;stopCamera()});if('serviceWorker'in navigator)navigator.serviceWorker.register(import.meta.env.BASE_URL+'sw.js').catch(()=>{});update();
+
+function finish() {
+  if (!active) return;
+
+  active = false;
+  cancelAnimationFrame(raf);
+  stopCamera();
+
+  $('start').disabled = false;
+  $('start').textContent = '▶ Start workout';
+  $('pause').disabled = true;
+  $('finish').disabled = true;
+
+  document.querySelectorAll('.choice').forEach(
+    b => b.disabled = false
+  );
+
+  setStatus('Session finished');
+
+  const goal = target();
+  const percentage = goal > 0
+    ? Math.round((reps / goal) * 100)
+    : 0;
+
+  $('finalReps').textContent = reps;
+  $('finalTime').textContent = fmt(elapsed);
+  $('finalGoal').textContent = `${percentage}%`;
+
+  let feedback;
+
+  if (reps === 0) {
+    feedback = 'No repetitions recorded. Try again!';
+  } else if (reps < goal) {
+    feedback = `Good effort! You completed ${reps} repetitions.`;
+  } else {
+    feedback = '🏆 Excellent! Goal achieved!';
+  }
+
+  $('summaryTitle').textContent = feedback;
+  setMsg(feedback);
+
+  $('summary').hidden = false;
+  $('summary').scrollIntoView({
+    behavior: 'smooth',
+    block: 'nearest'
+  });
+
+  if (reps > 0) speak(feedback);
+}
+
