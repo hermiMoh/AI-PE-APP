@@ -3,7 +3,30 @@ const withTimeout=(promise,ms,message)=>Promise.race([promise,new Promise((_,rej
 const $=id=>document.getElementById(id);let exercise='jack',model=null,stream=null,active=false,paused=false,phase='unknown',reps=0,elapsed=0,lastTick=0,raf=0,lastFrame=-1,seenAt=0,cameraFacing='user',goalAnnounced=false,phaseSince=0,landmarksValid=false;const video=$('video'),canvas=$('overlay'),ctx=canvas.getContext('2d');const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;const setMsg=s=>$('message').textContent=s;const setStatus=s=>$('status').textContent=s;const target=()=>Number($('target').value);const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);const angle=(a,b,c)=>{const ab=[a.x-b.x,a.y-b.y],cb=[c.x-b.x,c.y-b.y];return Math.acos(Math.max(-1,Math.min(1,(ab[0]*cb[0]+ab[1]*cb[1])/(Math.hypot(...ab)*Math.hypot(...cb)+1e-9))))*180/Math.PI};
 function speak(t){if(!$('voice').checked||!('speechSynthesis'in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(String(t));u.rate=1.13;u.volume=.8;window.speechSynthesis.speak(u)}
 function update(){ $('reps').textContent=reps;$('timer').textContent=fmt(elapsed);$('targetLabel').textContent=`Goal: ${target()} reps`;$('progressBar').style.width=`${Math.min(100,reps/target()*100)}%`;}
-function count(){reps++;update();if(reps%5===0||reps===target())speak(reps);if(reps>=target()&&!goalAnnounced){goalAnnounced=true;setMsg('Goal achieved! Amazing effort. Finish when ready.');speak('Goal achieved! Great job!')}}
+
+function count() {
+  reps++;
+  update();
+
+  if (reps >= target() && !goalAnnounced) {
+    goalAnnounced = true;
+    setMsg("🏆 Goal achieved! Excellent work!");
+    speak("Congratulations! Goal achieved!");
+  } else if (reps === 1) {
+    setMsg("✅ Great! First repetition completed!");
+    speak("One");
+  } else if (reps === Math.ceil(target() / 2)) {
+    setMsg("🔥 Excellent! Halfway to your goal!");
+    speak("Halfway there!");
+  } else {
+    setMsg(`💪 Keep going! ${reps} repetitions completed.`);
+
+    if (reps % 5 === 0) {
+      speak(reps);
+    }
+  }
+}
+
 function selectExercise(type){if(active)return;exercise=type;document.querySelectorAll('.choice').forEach(b=>b.classList.toggle('active',b.dataset.exercise===type));$('exerciseName').textContent=type==='jack'?'Jumping Jacks':'Squats';phase='unknown';phaseSince=0;setMsg(type==='jack'?'Jumping jacks: stand with arms down and feet together. Open wide, then return to start.':'Squats: face the camera at a slight angle. Bend your knees, then stand fully upright.');}
 document.querySelectorAll('.choice').forEach(b=>b.onclick=()=>selectExercise(b.dataset.exercise));$('target').onchange=update;
 async function loadModel(){if(model)return;setStatus('Loading AI model…');setMsg('Downloading pose detection model. This can take a moment on first use.');let vision;try{vision=await withTimeout(FilesetResolver.forVisionTasks(import.meta.env.BASE_URL+'wasm'),20000,'Local AI runtime could not load')}catch(e){throw Error('AI runtime could not initialize: '+e.message)}const options={baseOptions:{modelAssetPath:import.meta.env.BASE_URL+'models/pose_landmarker_lite.task',delegate:'GPU'},runningMode:'VIDEO',numPoses:1,minPoseDetectionConfidence:.55,minPosePresenceConfidence:.55,minTrackingConfidence:.5};try{model=await PoseLandmarker.createFromOptions(vision,options)}catch(e){options.baseOptions.delegate='CPU';try{model=await PoseLandmarker.createFromOptions(vision,options)}catch(cpuError){throw Error('AI model failed on GPU and CPU. Check internet or try Chrome: '+cpuError.message)}}}
@@ -17,7 +40,7 @@ if(next!==phase){if(now-phaseSince<180&&phase!=='unknown')return 'Keep moving sm
 function draw(p){canvas.width=video.videoWidth;canvas.height=video.videoHeight;ctx.clearRect(0,0,canvas.width,canvas.height);if(!p)return;const drawing=new DrawingUtils(ctx);drawing.drawConnectors(p,PoseLandmarker.POSE_CONNECTIONS,{color:'#40f0c3',lineWidth:4});drawing.drawLandmarks(p,{color:'#f4fbff',fillColor:'#347aff',radius:3});}
 function loop(now){if(!active)return;raf=requestAnimationFrame(loop);if(video.readyState<2||!model)return;if(video.currentTime===lastFrame)return;lastFrame=video.currentTime;try{const result=model.detectForVideo(video,now);const p=result.landmarks?.[0];draw(p);if(paused){$('poseState').textContent='Paused';return}if(!p){phase='unknown';phaseSince=0;$('poseState').textContent='No body detected — step back';return}const message=recognize(p,now);$('poseState').textContent=message;}catch(e){setMsg('Tracking error: '+e.message)}}
 let timeAccumulator=0;function clock(now){if(!active)return;if(!paused&&lastTick){timeAccumulator+=Math.min(now-lastTick,250);if(timeAccumulator>=1000){elapsed+=Math.floor(timeAccumulator/1000);timeAccumulator%=1000;update()}}lastTick=now;requestAnimationFrame(clock)}
-async function start(){if(active)return;$('start').disabled=true;setStatus('Loading AI…');try{await loadModel();setStatus('Requesting camera…');await startCamera();active=true;paused=false;phase='unknown';phaseSince=0;reps=0;elapsed=0;timeAccumulator=0;lastTick=0;lastFrame=-1;goalAnnounced=false;update();$('pause').disabled=false;$('finish').disabled=false;$('pause').textContent='Pause';$('start').textContent='Workout running';document.querySelectorAll('.choice').forEach(b=>b.disabled=true);setStatus('Workout in progress');setMsg('Full body visible? Start moving!');speak('Workout started');requestAnimationFrame(loop);requestAnimationFrame(clock)}catch(e){stopCamera();setStatus('Could not start');setMsg('⚠ '+(e.message||'Unable to access camera or load AI. Check permissions and internet connection.'));$('start').disabled=false}}
+async function start(){setMsg("Full body visible? Start moving!"); if(active)return;$('start').disabled=true;setStatus('Loading AI…');try{await loadModel();setStatus('Requesting camera…');await startCamera();active=true;paused=false;phase='unknown';phaseSince=0;reps=0;elapsed=0;timeAccumulator=0;lastTick=0;lastFrame=-1;goalAnnounced=false;update();$('pause').disabled=false;$('finish').disabled=false;$('pause').textContent='Pause';$('start').textContent='Workout running';document.querySelectorAll('.choice').forEach(b=>b.disabled=true);setStatus('Workout in progress');setMsg('Full body visible? Start moving!');speak('Workout started');requestAnimationFrame(loop);requestAnimationFrame(clock)}catch(e){stopCamera();setStatus('Could not start');setMsg('⚠ '+(e.message||'Unable to access camera or load AI. Check permissions and internet connection.'));$('start').disabled=false}}
 function pause(){if(!active)return;paused=!paused;$('pause').textContent=paused?'Resume':'Pause';setStatus(paused?'Workout paused':'Workout in progress');lastTick=0;timeAccumulator=0}
 function finish(){if(!active)return;active=false;cancelAnimationFrame(raf);stopCamera();$('start').disabled=false;$('start').textContent='▶ Start workout';$('pause').disabled=true;$('finish').disabled=true;document.querySelectorAll('.choice').forEach(b=>b.disabled=false);setStatus('Session finished');$('finalReps').textContent=reps;$('finalTime').textContent=fmt(elapsed);$('finalGoal').textContent=`${Math.round(reps/target()*100)}%`;$('summary').hidden=false;$('summary').scrollIntoView({behavior:'smooth',block:'nearest'});speak('Workout complete')}
 $('start').addEventListener('click',()=>{setMsg('Start tapped — checking camera…');start()});$('pause').onclick=pause;$('finish').onclick=finish;$('again').onclick=()=>{$('summary').hidden=true;window.scrollTo({top:0,behavior:'smooth'});setMsg('Choose your exercise and press Start workout.')};$('flipCamera').onclick=async()=>{if(!active)return;const wasPaused=paused;paused=true;stopCamera();cameraFacing=cameraFacing==='user'?'environment':'user';try{await startCamera();phase='unknown';phaseSince=0;lastFrame=-1;paused=wasPaused}catch(e){setMsg('Camera switch failed: '+e.message);finish()}};window.addEventListener('pagehide',()=>{active=false;stopCamera()});if('serviceWorker'in navigator)navigator.serviceWorker.register(import.meta.env.BASE_URL+'sw.js').catch(()=>{});update();
