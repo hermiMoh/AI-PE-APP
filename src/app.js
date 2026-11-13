@@ -92,3 +92,66 @@ function finish() {
   if (reps > 0) speak(feedback);
 }
 
+
+/* SmartFit AI - Button Event Handlers */
+
+$('start').addEventListener('click', start);
+
+$('pause').addEventListener('click', pause);
+
+$('finish').addEventListener('click', finish);
+
+$('again').addEventListener('click', () => {
+  $('summary').hidden = true;
+  $('summaryTitle').textContent = 'Workout Summary';
+
+  reps = 0;
+  elapsed = 0;
+  phase = 'unknown';
+  phaseSince = 0;
+  goalAnnounced = false;
+
+  update();
+  setStatus('Ready to start');
+  setMsg('Ready! Press Start Workout to begin.');
+
+  $('start').scrollIntoView({
+    behavior: 'smooth',
+    block: 'center'
+  });
+});
+
+$('flipCamera').addEventListener('click', async () => {
+  cameraFacing = cameraFacing === 'user'
+    ? 'environment'
+    : 'user';
+
+  if (!active) return;
+
+  try {
+    stopCamera();
+    await startCamera();
+    phase = 'unknown';
+    phaseSince = 0;
+  } catch (error) {
+    active = false;
+    cancelAnimationFrame(raf);
+    stopCamera();
+
+    $('start').disabled = false;
+    $('start').textContent = '▶ Start workout';
+    $('pause').disabled = true;
+    $('finish').disabled = true;
+
+    document.querySelectorAll('.choice').forEach(
+      button => button.disabled = false
+    );
+
+    setStatus('Camera error');
+    setMsg('⚠ ' + error.message);
+  }
+});
+
+update();
+
+
